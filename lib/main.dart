@@ -14,7 +14,10 @@ void main() {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const Home1(),
+      home: BlocProvider(
+        create: (_) => PersonsBloc(),
+        child: const Home1(),
+      ),
     ),
   );
 }
@@ -40,9 +43,9 @@ extension UrlString on PersonUrl {
   String get urlString {
     switch (this) {
       case PersonUrl.person1:
-        return 'htps://www.google.com';
+        return 'http://localhost:5500/API/person1.json';
       case PersonUrl.person2:
-        return 'htps://www.youtube.com';
+        return 'http://localhost:5500/API/person2.json';
     }
   }
 }
@@ -84,6 +87,37 @@ class FetchResult {
       'FetchResult (isRetrivedFromCache = $isRetrivedFromCache , persons = $persons,)';
 }
 
+class PersonsBloc extends Bloc<LoadAction, FetchResult?> {
+  final Map<PersonUrl, Iterable<Person>> _cache = {};
+  PersonsBloc() : super(null) {
+    on<LoadPersonsAction>(
+      (event, emit) async {
+        final url = event.url;
+        if (_cache.containsKey(url)) {
+          final cachedPersons = _cache[url]!;
+          final result = FetchResult(
+            persons: cachedPersons,
+            isRetrivedFromCache: true,
+          );
+          emit(result);
+        } else {
+          final persons = await getPersons(url.urlString);
+          _cache[url] = persons;
+          final result = FetchResult(
+            persons: persons,
+            isRetrivedFromCache: false,
+          );
+          emit(result);
+        }
+      },
+    );
+  }
+}
+
+extension Subscript<T> on Iterable<T> {
+  T? operator [](int index) => length > index ? elementAt(index) : null;
+}
+
 class Home1 extends StatelessWidget {
   const Home1({super.key});
 
@@ -93,6 +127,52 @@ class Home1 extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Yize 1'),
         centerTitle: true,
+      ),
+      body: Column(
+        children: [
+          Row(
+            children: [
+              TextButton(
+                onPressed: () {
+                  context.read<PersonsBloc>().add(
+                        const LoadPersonsAction(
+                          url: PersonUrl.person1,
+                        ),
+                      );
+                },
+                child: const Text('Person #1'),
+              ),
+              TextButton(
+                onPressed: () {
+                  context.read<PersonsBloc>().add(
+                        const LoadPersonsAction(
+                          url: PersonUrl.person2,
+                        ),
+                      );
+                },
+                child: const Text('Person #2'),
+              ),
+            ],
+          ),
+          BlocBuilder<PersonsBloc, FetchResult?>(
+            buildWhen: (previousResult, currentResult) {
+              return previousResult?.persons != currentResult?.persons;
+            },
+            builder: ((context, FetchResult) {
+              final persons = FetchResult?.persons;
+              if(persons == null){
+                return const SizedBox();
+              }
+              return Expanded(
+                child: ListView.builder(
+                  itemCount: persons.length,
+                  itemBuilder: (context, index) {
+                    final person = persons[index]!;
+                    return ListTile(title: Text(person.name),);
+                  },),
+              );
+            }))
+        ],
       ),
     );
   }
